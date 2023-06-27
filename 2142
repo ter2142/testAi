@@ -8,7 +8,40 @@ import logging
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 import keras
+from telegram.ext import Updater, CommandHandler
 
+
+def printGreeting(language):
+    if language == 'ru':
+        return 'Привет, мир!'
+    elif language == 'en':
+        return 'Hello, world!'
+    else:
+        return 'Language not supported'
+
+def start(update, context):
+    context.bot.send_message(chat_id=update.effective_chat.id, text="Hello, I'm a bot!")
+
+def greeting(update, context):
+    user_language = context.args[0]
+    message = printGreeting(user_language)
+    context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+
+def start_bot():
+    TOKEN = '6176962512:AAGbKx4NrZd1s_d4ujCN6iN_mwbyrTj1qcs'
+    updater = Updater(token=TOKEN, use_context=True)
+    dispatcher = updater.dispatcher
+    
+    start_handler = CommandHandler('start', start)
+    greeting_handler = CommandHandler('greet', greeting, pass_args=True)
+    
+    dispatcher.add_handler(start_handler)
+    dispatcher.add_handler(greeting_handler)
+
+    updater.start_polling()
+
+if __name__ == '__main__':
+    start_bot()
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -109,7 +142,6 @@ def classify_msg(msg):
     pred = model.predict(msg_seq)[0]
     return pred.argmax()
 
-Карим, [27.06.2023 0:09]
 # Функция обработки сообщений пользователя
 bot = telebot.TeleBot("6176962512:AAGbKx4NrZd1s_d4ujCN6iN_mwbyrTj1qcs")
 @bot.message_handler(func=lambda message: True)

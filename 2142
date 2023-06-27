@@ -9,40 +9,64 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 import keras
 import telegram
-from telegram.ext import Updater, CommandHandler
-
-def printGreeting(language):
-    if language == 'ru':
-        return 'Привет, мир!'
-    elif language == 'en':
-        return 'Hello, world!'
-    else:
-        return 'Language not supported'
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+import logging
 
 def start(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text="Hello, I'm a bot!")
+    """Send a welcome message when the command /start is issued."""
+    update.message.reply_text('Hi, Welcome to the AI assistant Bot!')
 
-def greeting(update, context):
-    user_language = context.args[0]
-    message = printGreeting(user_language)
-    context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+def help_command(update, context):
+    """Send a message when the command /help is issued."""
+    update.message.reply_text('Help!')
+
+def echo(update, context):
+    """Echo the user message."""
+    update.message.reply_text(update.message.text)
+
+def error_callback(update, context):
+    """Log the error and send a telegram message to notify the user."""
+    logging.error(msg="Exception while handling an update:", exc_info=context.error)
+    try:
+        update.message.reply_text(f"✋ An error occurred while processing your message: {context.error}")
+    except:
+        pass
+
+def button(update, context):
+    """Send a message when the button is pressed."""
+    query = update.callback_query
+    query.answer()
+    query.edit_message_text(text='We are still working on this feature!')
+
+def idle(update, context):
+    """Stop the bot when the user sends command /stop."""
+    update.message.reply_text('Bye-bye')
+    updater.stop()
 
 def start_bot():
     TOKEN = '6176962512:AAGbKx4NrZd1s_d4ujCN6iN_mwbyrTj1qcs'
-    bot = telegram.Bot(token=TOKEN)
-    updater = Updater(bot=bot, request_kwargs={'context': True})
-    dispatcher = updater.dispatcher
-    
-    start_handler = CommandHandler('start', start)
-    greeting_handler = CommandHandler('greet', greeting, pass_args=True)
-    
-    dispatcher.add_handler(start_handler)
-    dispatcher.add_handler(greeting_handler)
+    updater = Updater(token=TOKEN, use_context=True)
 
+    updater.dispatcher.add_handler(CommandHandler('start', start))
+    updater.dispatcher.add_handler(CommandHandler('help', help_command))
+    echo_handler = MessageHandler(Filters.text & (~Filters.command), echo)
+    updater.dispatcher.add_handler(echo_handler)
+    updater.dispatcher.add_error_handler(error_callback)
+
+    keyboard = [[InlineKeyboardButton("Button", callback_data='1')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    updater.dispatcher.add_handler(CallbackQueryHandler(button, pattern='1'))
+    updater.dispatcher.add_handler(CommandHandler('stop', idle))
+    
     updater.start_polling()
+    
+    updater.idle()
 
 if __name__ == '__main__':
     start_bot()
+
+
 
 logging.basicConfig(level=logging.DEBUG)
 

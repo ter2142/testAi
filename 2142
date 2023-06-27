@@ -8,8 +8,8 @@ import logging
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 import keras
+import telegram
 from telegram.ext import Updater, CommandHandler
-
 
 def printGreeting(language):
     if language == 'ru':
@@ -29,7 +29,8 @@ def greeting(update, context):
 
 def start_bot():
     TOKEN = '6176962512:AAGbKx4NrZd1s_d4ujCN6iN_mwbyrTj1qcs'
-    updater = Updater(token=TOKEN, use_context=True)
+    bot = telegram.Bot(token=TOKEN)
+    updater = Updater(bot=bot, request_kwargs={'context': True})
     dispatcher = updater.dispatcher
     
     start_handler = CommandHandler('start', start)
@@ -143,7 +144,7 @@ def classify_msg(msg):
     return pred.argmax()
 
 # Функция обработки сообщений пользователя
-bot = telebot.TeleBot("6176962512:AAGbKx4NrZd1s_d4ujCN6iN_mwbyrTj1qcs")
+# bot = telebot.TeleBot("6176962512:AAGbKx4NrZd1s_d4ujCN6iN_mwbyrTj1qcs")
 @bot.message_handler(func=lambda message: True)
 def handle_text_messages(message):
     msg_text = message.text.lower()

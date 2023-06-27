@@ -1,4 +1,3 @@
-Карим, [27.06.2023 0:09]
 import random
 import telebot
 import tensorflow as tf

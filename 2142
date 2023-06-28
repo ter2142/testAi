@@ -1,0 +1,144 @@
+import random
+import telebot
+import tensorflow as tf
+import re
+import json
+import os
+import logging
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import MultinomialNB
+import keras
+
+
+logging.basicConfig(level=logging.DEBUG)
+
+# Создание токенизатора
+tokenizer = tf.keras.preprocessing.text.Tokenizer(num_words=10000)
+
+# Инициализация нейронной сети
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Embedding(input_dim=10000, output_dim=64, mask_zero=True),
+    tf.keras.layers.Dropout(0.2),
+    tf.keras.layers.Dense(16, activation='relu'),
+    tf.keras.layers.Dropout(0.2),
+    tf.keras.layers.Dense(32, activation='relu'),
+    tf.keras.layers.Dense(3, activation='softmax')
+])
+
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'], run_eagerly=True)
+
+# Загрузка данных из файла
+data = []
+filename = 'whatsapp_chat.txt'
+if os.path.isfile(filename):
+    with open(filename, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    input_text = parts[0].lower()
+                    output_text = parts[1].lower()
+                    data.append((input_text, output_text))
+
+# Создание словаря labels для присвоения числовых меток классам в диалогах.
+labels = {'спам': 0, 'вопрос': 1, 'отзыв': 2, 'жалоба': 3, 'приветствие': 4}
+labels_reverse = {0: 'спам', 1: 'вопрос', 2: 'отзыв', 3: 'жалоба', 4: 'приветствие'}
+data = [
+    ('Привет!', 'приветствие'),
+    ('Здесь наводит на мысль, что это спам.', 'спам'),
+    ('Почему мой заказ еще не доставлен?', 'вопрос'),
+    ('Я хотела бы поделиться своим опытом покупки на Вашем сайте.', 'отзыв'),
+    ('Я обнаружил серьезный дефект на продукте, который я купил.', 'жалоба'),
+    ('привет', 'приветствие'),
+    ('здраствуй', 'приветствие'),
+    ('привет', 'спам'),
+    ('как дела?', 'спам'),
+]
+# Переделываем метки классов из строковых в числовые
+y = []
+for txt, label in data:
+    label_num = labels.get(label)
+    if label_num is not None:
+        y.append(label_num)
+
+corpus = [txt for txt, label in data]
+vectorizer = CountVectorizer()
+X = vectorizer.fit_transform(corpus)
+
+clf = MultinomialNB()
+clf.fit(X, y)
+
+# Пример работы модели на новом диалоге:
+new_text = "Я бы хотел оставить отзыв о вашем продукте. Как это сделать?"
+new_X = vectorizer.transform([new_text])
+predicted_class = clf.predict(new_X)
+predicted_label = labels_reverse[predicted_class[0]]
+
+print(f"Текст: {new_text}\nКласс: {predicted_label}")
+
+# Создание обучающих данных
+random.shuffle(data)
+X = []
+y = []
+for input_text, output_text in data:
+    X.append(input_text)
+    y.append(labels[output_text])
+
+tokenizer.fit_on_texts(X)
+X_seq = tokenizer.texts_to_sequences(X)
+X_pad = tf.keras.preprocessing.sequence.pad_sequences(X_seq, maxlen=100)
+y_cat = tf.keras.utils.to_categorical(y, num_classes=5)
+
+# Обучение модели
+try:
+    model.fit(X_pad, y_cat, epochs=100, verbose=1)
+except Exception as e:
+    logging.error("Ошибка при загрузке и обучении модели: {}".format(e))
+    
+# Проверка на количество образцов в массивах X_pad и y_cat
+if len(X_pad) != len(y_cat):
+    logging.error("Ошибка: количество образцов в X_pad и y_cat не совпадает")
+else:
+    logging.debug("Количество образцов в массивах X_pad и y_cat совпадает")
+
+# Функция классификации сообщения
+def classify_msg(msg):
+    msg_seq = tokenizer.texts_to_sequences([msg])
+    msg_seq = tf.keras.preprocessing.sequence.pad_sequences(msg_seq, maxlen=100)
+    pred = model.predict(msg_seq)[0]
+    return pred.argmax()
+# Функция обработки сообщений пользователя
+bot = telebot.TeleBot("6176962512:AAGbKx4NrZd1s_d4ujCN6iN_mwbyrTj1qcs")
+@bot.message_handler(func=lambda message: True)
+def handle_text_messages(message):
+    msg_text = message.text.lower()
+    try:
+        category = classify_msg(msg_text)
+        category_name = labels_reverse.get(category, "unknown")
+        bot.reply_to(message, "Категория: {}".format(category_name))
+        with open(filename, 'a', encoding='utf-8') as f:
+            f.write("{}\t{}\n".format(msg_text, category_name))
+        X.append(msg_text)
+        y.append(category)
+        tokenizer.fit_on_texts(X)
+        X_seq = tokenizer.texts_to_sequences(X)
+        X_pad = tf.keras.preprocessing.sequence.pad_sequences(X_seq, maxlen=100)
+        y_cat = tf.keras.utils.to_categorical(y, num_classes=3, dtype=int)
+        if len(X_pad) != len(y_cat):
+            logging.error("Ошибка: количество образцов в X_pad и y_cat не совпадает после добавления нового сообщения")
+            return
+        model.fit(X_pad, y_cat, epochs=100, verbose=1)
+    except Exception as e:
+        logging.error("Ошибка при обработке сообщения: {}".format(e))
+@bot.message_handler(content_types=['text'])
+def send_prediction(message):
+    text = message.text
+    predicted_class = classify_msg(text)
+    predicted_label = labels_reverse[predicted_class]
+    bot.send_message(message.chat.id, f"Текст: {text}\nКатегория: {predicted_label}")
+
+bot.polling(none_stop=True)
+
+# Запуск бота
+bot.polling(non_stop=True, interval=0, timeout=20)
